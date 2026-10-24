@@ -1,0 +1,48 @@
+name: Build Revola
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  dsp-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run DSP tests
+        run: |
+          g++ -O2 -std=c++17 tests/dsp_test.cpp -o dsp_test
+          ./dsp_test
+
+  build:
+    needs: dsp-test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Collect plug-ins
+        shell: bash
+        run: |
+          mkdir -p dist
+          find build -type d -name "Revola.vst3" -prune -exec cp -R {} dist/ \;
+          find build -type d -name "Revola.component" -prune -exec cp -R {} dist/ \; || true
+          find build -type d -name "Revola.app" -prune -exec cp -R {} dist/ \; || true
+          find build -type f -name "Revola.exe" -exec cp {} dist/ \; || true
+          ls -la dist
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: Revola-${{ runner.os }}
+          path: dist
